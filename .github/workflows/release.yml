@@ -23,4 +23,4 @@ jobs:
 
       - run: pnpm install
 
-      - run: node scripts/release.js
+      - run: node scripts/release.ts
