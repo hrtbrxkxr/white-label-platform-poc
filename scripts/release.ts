@@ -2,22 +2,48 @@ import fs from "fs-extra";
 import path from "path";
 
 const consumers = {
-  A: ["feature-login", "feature-dashboard"],
-  B: ["feature-settings"],
-  C: ["feature-login", "feature-settings"],
+  A: {
+    app: "consumer-a",
+    features: ["feature-login", "feature-dashboard"],
+  },
+  B: {
+    app: "consumer-b",
+    features: ["feature-settings"],
+  },
+  C: {
+    app: "consumer-c",
+    features: ["feature-login", "feature-settings"],
+  },
 } as const;
 
 type Consumer = keyof typeof consumers;
 
-async function copyRootFiles(outputDir: string) {
-  const rootFiles = [
-    "package.json",
-    "pnpm-workspace.yaml",
-    "tsconfig.json",
-    ".gitignore",
-  ];
+const SHARED_PACKAGES = ["shared-ui", "shared-utils"];
 
-  for (const file of rootFiles) {
+const ROOT_FILES = [
+  "package.json",
+  "pnpm-workspace.yaml",
+  "tsconfig.json",
+  "turbo.json",
+  ".npmrc",
+  ".gitignore",
+];
+
+async function copyIfExists(
+  source: string,
+  destination: string,
+) {
+  const exists = await fs.pathExists(source);
+
+  if (!exists) {
+    throw new Error(`Missing: ${source}`);
+  }
+
+  await fs.copy(source, destination);
+}
+
+async function copyRootFiles(outputDir: string) {
+  for (const file of ROOT_FILES) {
     const source = path.join(process.cwd(), file);
 
     if (await fs.pathExists(source)) {
@@ -26,33 +52,47 @@ async function copyRootFiles(outputDir: string) {
   }
 }
 
-async function copyConsumerApp(consumer: Consumer, outputDir: string) {
-  const appName = `consumer-${consumer.toLowerCase()}`;
+async function copyConsumerApp(
+  appName: string,
+  outputDir: string,
+) {
+  const source = path.join(
+    process.cwd(),
+    "apps",
+    appName,
+  );
 
-  const source = path.join(process.cwd(), "apps", appName);
+  const destination = path.join(
+    outputDir,
+    "apps",
+    appName,
+  );
 
-  const destination = path.join(outputDir, "apps", appName);
+  console.log(`Copy app: ${appName}`);
 
-  await fs.copy(source, destination);
+  await copyIfExists(source, destination);
 }
 
-async function copySharedPackages(outputDir: string) {
-  const sharedPackages = ["shared-ui", "shared-utils"];
-
-  for (const pkg of sharedPackages) {
-    await fs.copy(
-      path.join(process.cwd(), "packages", pkg),
-      path.join(outputDir, "packages", pkg),
+async function copyPackages(
+  packages: string[],
+  outputDir: string,
+) {
+  for (const pkg of packages) {
+    const source = path.join(
+      process.cwd(),
+      "packages",
+      pkg,
     );
-  }
-}
 
-async function copyFeatures(consumer: Consumer, outputDir: string) {
-  for (const feature of consumers[consumer]) {
-    await fs.copy(
-      path.join(process.cwd(), "packages", feature),
-      path.join(outputDir, "packages", feature),
+    const destination = path.join(
+      outputDir,
+      "packages",
+      pkg,
     );
+
+    console.log(`Copy package: ${pkg}`);
+
+    await copyIfExists(source, destination);
   }
 }
 
@@ -64,23 +104,41 @@ async function main() {
     process.exit(1);
   }
 
+  const config = consumers[consumer];
+
   const outputDir = path.join(
     process.cwd(),
     "release",
-    `consumer-${consumer.toLowerCase()}`,
+    config.app,
   );
 
   await fs.emptyDir(outputDir);
 
+  console.log(`Generating ${config.app}`);
+
   await copyRootFiles(outputDir);
 
-  await copyConsumerApp(consumer, outputDir);
+  await copyConsumerApp(
+    config.app,
+    outputDir,
+  );
 
-  await copySharedPackages(outputDir);
+  await copyPackages(
+    SHARED_PACKAGES,
+    outputDir,
+  );
 
-  await copyFeatures(consumer, outputDir);
+  await copyPackages(
+    [...config.features],
+    outputDir,
+  );
 
-  console.log(`Release generated: consumer-${consumer.toLowerCase()}`);
+  console.log(
+    `Release generated at ${outputDir}`,
+  );
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
