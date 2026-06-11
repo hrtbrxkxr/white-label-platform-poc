@@ -9,6 +9,53 @@ const consumers = {
 
 type Consumer = keyof typeof consumers;
 
+async function copyRootFiles(outputDir: string) {
+  const rootFiles = [
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tsconfig.json",
+    ".gitignore",
+  ];
+
+  for (const file of rootFiles) {
+    const source = path.join(process.cwd(), file);
+
+    if (await fs.pathExists(source)) {
+      await fs.copy(source, path.join(outputDir, file));
+    }
+  }
+}
+
+async function copyConsumerApp(consumer: Consumer, outputDir: string) {
+  const appName = `consumer-${consumer.toLowerCase()}`;
+
+  const source = path.join(process.cwd(), "apps", appName);
+
+  const destination = path.join(outputDir, "apps", appName);
+
+  await fs.copy(source, destination);
+}
+
+async function copySharedPackages(outputDir: string) {
+  const sharedPackages = ["shared-ui", "shared-utils"];
+
+  for (const pkg of sharedPackages) {
+    await fs.copy(
+      path.join(process.cwd(), "packages", pkg),
+      path.join(outputDir, "packages", pkg),
+    );
+  }
+}
+
+async function copyFeatures(consumer: Consumer, outputDir: string) {
+  for (const feature of consumers[consumer]) {
+    await fs.copy(
+      path.join(process.cwd(), "packages", feature),
+      path.join(outputDir, "packages", feature),
+    );
+  }
+}
+
 async function main() {
   const consumer = process.argv[2] as Consumer;
 
@@ -20,27 +67,20 @@ async function main() {
   const outputDir = path.join(
     process.cwd(),
     "release",
-    `consumer-${consumer.toLowerCase()}`
+    `consumer-${consumer.toLowerCase()}`,
   );
 
   await fs.emptyDir(outputDir);
 
-  // copy selected features
-  for (const feature of consumers[consumer]) {
-    const source = path.join(process.cwd(), "packages", feature);
+  await copyRootFiles(outputDir);
 
-    const destination = path.join(
-      outputDir,
-      "packages",
-      feature
-    );
+  await copyConsumerApp(consumer, outputDir);
 
-    console.log(`Copying ${feature}`);
+  await copySharedPackages(outputDir);
 
-    await fs.copy(source, destination);
-  }
+  await copyFeatures(consumer, outputDir);
 
-  console.log(`Consumer ${consumer} release generated`);
+  console.log(`Release generated: consumer-${consumer.toLowerCase()}`);
 }
 
 main().catch(console.error);
