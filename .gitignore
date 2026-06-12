@@ -17,6 +17,7 @@ out
 
 # release output
 release
+.consumer-repos/
 
 # mac
 .DS_Store
